@@ -42,7 +42,7 @@ def handle_vignette(driver, link_element):
         time.sleep(1)
         driver.execute_script("arguments[0].scrollIntoView(true);", link_element)
         ActionChains(driver).move_to_element(link_element).pause(0.5).click().perform()
-        time.sleep(2)
+        #time.sleep(2)
 
 # Chrome起動
 options = uc.ChromeOptions()
@@ -66,18 +66,20 @@ try:
         existing_files = set(f.replace(".html", "") for f in os.listdir(save_dir) if f.endswith(".html"))
 
         driver.get(list_url)
-        time.sleep(2)
+        #time.sleep(2)
 
         if detect_cloudflare(driver):
             cloudflare_count += 1
             print(f"[警告] Cloudflare認証検知（{cloudflare_count}回目）")
+
             if cloudflare_count >= MAX_CLOUDFLARE_RETRY:
                 input("[入力待ち] 認証を手動で通過してください。完了後Enterキーを押してください。")
                 cloudflare_count = 0
             else:
-                print("[巻き戻し] リストページに戻って再試行します")
+                print("[巻き戻し] 日付一覧から再試行します")
                 driver.get(list_url)
-                time.sleep(2)
+                #time.sleep(2)
+                driver.execute_script(adblock_script)
                 continue
 
         WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.date-table .table-row")))
@@ -121,9 +123,9 @@ try:
                 try:
                     driver.execute_script("arguments[0].scrollIntoView(true);", link_element)
                     ActionChains(driver).move_to_element(link_element).pause(0.5).click().perform()
-                    time.sleep(2)
+                    #time.sleep(2)
                     handle_vignette(driver, link_element)
-                    WebDriverWait(driver, 10).until(lambda d: "-data" in d.current_url)
+                    #WebDriverWait(driver, 10).until(lambda d: "-data" in d.current_url)
                     driver.execute_script(adblock_script)
 
                     if detect_cloudflare(driver):
@@ -132,11 +134,16 @@ try:
                         if cloudflare_count >= MAX_CLOUDFLARE_RETRY:
                             input("[入力待ち] 認証を手動で通過してください。完了後Enterキーを押してください。")
                             cloudflare_count = 0
-                            break
+
+                            # ✅ Cloudflare突破後にすでにページ表示されてる → 保存
+                            print("[情報] Cloudflare認証通過後のページを保存します")
+                            save_html(driver, date_str, save_dir)
+
+                            break  # この日付の処理は完了、次へ
                         else:
                             print("[巻き戻し] 日付一覧から再試行します")
                             driver.get(list_url)
-                            time.sleep(2)
+                            #time.sleep(2)
                             driver.execute_script(adblock_script)
                             retry_flag = True
                             continue
@@ -150,7 +157,7 @@ try:
                     break
 
             driver.get(list_url)
-            time.sleep(2)
+            #time.sleep(2)
             driver.execute_script(adblock_script)
 
 finally:
