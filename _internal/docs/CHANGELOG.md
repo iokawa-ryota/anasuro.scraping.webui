@@ -30,6 +30,8 @@
 - 本ファイル（変更履歴の一本化）を追加
 - ユーザー向け `STARTUP_GUIDE.md` をルート直下運用に変更
 - `RELEASE_READINESS.md` の内容を本ファイルへ統合し、ファイルは廃止
+- ドキュメントを3系統に整理（アップデート展望 / ユーザーガイド / 変更履歴）
+- 重複ファイルを廃止（`_internal/docs/README.md`, `_internal/docs/STARTUP_GUIDE.md`, `_internal/docs/ARCHITECTURE.md`）
 
 ### リリース準備状態（統合内容）
 
