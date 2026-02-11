@@ -1,36 +1,21 @@
-# 配布版ドキュメント
+# ドキュメント一覧
 
-## 目的
+## ユーザー向け
 
-ユーザー混乱を防ぐため、プログラム本体と運用データを分離しています。
+- `STARTUP_GUIDE.md`（ルート直下）
+  - セットアップ手順
+  - 運用時に触るファイルの説明
 
-## 実フォルダ構成
+## 内部向け
 
-```text
-anaslot-public-20260212/
-├─ setup.bat / start.bat          # ユーザー導線
-├─ store_list.csv                 # ユーザー設定
-├─ data/                          # HTML保存先
-├─ output/                        # 整形CSV出力
-└─ _internal/                     # 内部実装
-   ├─ app/                        # Python本体 + UI
-   ├─ bin/                        # 内部スクリプト/依存定義
-   ├─ docs/                       # 内部ドキュメント
-   └─ runtime/                    # ログ・一時CSV
-```
+- `_internal/docs/PRODUCT_GOALS.md`
+  - プロダクト目標と要件
+- `_internal/docs/ARCHITECTURE.md`
+  - 設計方針、構成、データフロー
+- `_internal/docs/CHANGELOG.md`
+  - 変更履歴の一元管理
 
-## 初期設定
+## 基本方針
 
-1. `pip install -r _internal/bin/requirements.txt`
-2. `store_list.csv` を編集
-3. `python _internal/bin/setup_check.py`
-4. `python _internal/app/app.py`
-
-## 補足
-
-- エンドユーザーが日常的に見る対象はフォルダ直下のみを想定
-- 実行時生成物（内部ログなど）は `_internal/runtime/` に出力されます
-
-## 仕様方針
-
-- 最終目標と進行方針: `_internal/docs/PRODUCT_GOALS.md`
+- エンドユーザーの操作対象はフォルダ直下に限定する
+- `_internal/` は内部実装として扱う
