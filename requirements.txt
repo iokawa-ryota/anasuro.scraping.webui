@@ -1,7 +1,0 @@
-Flask==3.0.0
-pandas==2.1.4
-Werkzeug==3.0.1
-undetected-chromedriver==3.5.4
-selenium==4.15.2
-beautifulsoup4==4.12.2
-webdriver-manager==4.0.1
