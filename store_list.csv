@@ -1,0 +1,3 @@
+store_name,store_url,data_directory
+Sample Store A,https://example.com/store-a,./data/store_a
+Sample Store B,https://example.com/store-b,./data/store_b

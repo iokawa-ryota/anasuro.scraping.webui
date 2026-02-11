@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>スロット店舗スクレイピング</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', 'Hiragino Sans', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 30px 20px;
+        }
+
+        .control-panel {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .control-btn {
+            flex: 1;
+            min-width: 120px;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .select-all-btn {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        .select-all-btn:hover {
+            background-color: #45a049;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
+        }
+
+        .clear-all-btn {
+            background-color: #f44336;
+            color: white;
+        }
+
+        .clear-all-btn:hover {
+            background-color: #da190b;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(244, 67, 54, 0.4);
+        }
+
+        .store-list {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 15px;
+            margin-bottom: 30px;
+            max-height: 500px;
+            overflow-y: auto;
+            padding-right: 10px;
+        }
+
+        .store-list::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .store-list::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+
+        .store-list::-webkit-scrollbar-thumb {
+            background: #667eea;
+            border-radius: 10px;
+        }
+
+        .store-list::-webkit-scrollbar-thumb:hover {
+            background: #764ba2;
+        }
+
+        .store-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 15px;
+            background-color: #f9f9f9;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .store-item:hover {
+            background-color: #f5f5f5;
+            border-color: #667eea;
+        }
+
+        .store-item.dragover {
+            border-color: #f093fb;
+            background-color: #fff0f5;
+        }
+
+        .store-item.completed {
+            background-color: #d4edda;
+            border-color: #28a745;
+        }
+
+        .store-item.completed::after {
+            content: " ✓";
+            color: #28a745;
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        /* 処理実行済み（更新なし） */
+        .store-item.processed {
+            background-color: #e8f4f8;
+            border-color: #17a2b8;
+            opacity: 0.9;
+        }
+
+        .store-item.processed::after {
+            content: " ◇";
+            color: #17a2b8;
+            font-weight: bold;
+            font-size: 14px;
+        }
+
+        .drag-handle {
+            width: 16px;
+            height: 16px;
+            margin-right: 12px;
+            background: linear-gradient(180deg, #bbb 0%, #999 100%);
+            border-radius: 2px;
+            position: relative;
+        }
+        .drag-handle::before, .drag-handle::after {
+            content: '';
+            position: absolute;
+            left: 4px;
+            right: 4px;
+            height: 2px;
+            background: #666;
+            border-radius: 1px;
+        }
+        .drag-handle::before { top: 5px; }
+        .drag-handle::after { bottom: 5px; }
+
+        .store-item input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            margin-right: 12px;
+            cursor: pointer;
+            accent-color: #667eea;
+        }
+
+        .store-item input[type="checkbox"]:checked + label {
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .store-item label {
+            flex: 1;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 0;
+        }
+
+        .status-info {
+            background-color: #e3f2fd;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .status-info strong {
+            color: #667eea;
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+            margin-bottom: 10px;
+        }
+
+        .submit-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(102, 126, 234, 0.6);
+        }
+
+        .submit-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .format-btn {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            box-shadow: 0 4px 12px rgba(245, 87, 108, 0.4);
+        }
+
+        .format-btn:hover:not(:disabled) {
+            box-shadow: 0 6px 16px rgba(245, 87, 108, 0.6);
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .alert {
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 6px;
+            display: none;
+        }
+
+        .alert.success {
+            background-color: #d4edda;
+            color: #155724;
+            border-left: 4px solid #28a745;
+            display: block;
+        }
+
+        .alert.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border-left: 4px solid #f5c6cb;
+            display: block;
+        }
+
+        .empty-message {
+            text-align: center;
+            color: #999;
+            padding: 30px 20px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎰 スロット店舗スクレイピング</h1>
+            <p>スクレイピング対象の店舗を選択してください</p>
+        </div>
+
+        <div class="content">
+            <div id="alert" class="alert"></div>
+
+            <div class="status-info">
+                選択中: <strong id="selectedCount">0</strong> / <strong id="totalCount">0</strong> 店舗
+            </div>
+
+            <div class="control-panel">
+                <button class="control-btn select-all-btn" onclick="selectAll()">全選択</button>
+                <button class="control-btn clear-all-btn" onclick="clearAll()">全解除</button>
+            </div>
+
+            <div id="storeListContainer" class="store-list"></div>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>スクレイピング処理を実行中...</p>
+            </div>
+
+            <button class="submit-btn" id="submitBtn" onclick="submitSelection()">
+                スクレイピングを開始
+            </button>
+
+            <button class="submit-btn format-btn" id="formatBtn" onclick="formatOffline()">
+                📊 Excel 自動整形を実行
+            </button>
+            
+            <button class="submit-btn" id="saveOrderBtn" onclick="saveOrder()">
+                並び順を保存（CSV反映）
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let stores = [];
+        let selectedSet = new Set();
+        let completedStores = [];   // データ更新があった店舗
+        let processedStores = [];   // 処理を実行した店舗（更新なしも含む）
+
+        // ページロード時に店舗リストを取得
+        async function loadStores() {
+            try {
+                const response = await fetch('/api/stores');
+                if (!response.ok) throw new Error('店舗リストの取得に失敗しました');
+                
+                stores = await response.json();
+                renderStoreList();
+                updateStatus();
+            } catch (error) {
+                showAlert('エラー: ' + error.message, 'error');
+                console.error(error);
+            }
+        }
+
+        // 店舗リストを表示
+        function renderStoreList() {
+            const container = document.getElementById('storeListContainer');
+            
+            if (stores.length === 0) {
+                container.innerHTML = '<div class="empty-message">店舗情報が見つかりませんでした</div>';
+                return;
+            }
+
+            container.innerHTML = stores.map((store, index) => {
+                const className = completedStores.includes(store.name)
+                    ? 'completed'
+                    : processedStores.includes(store.name)
+                        ? 'processed'
+                        : '';
+
+                return `
+                <div class="store-item ${className}" draggable="true" data-index="${index}">
+                    <div class="drag-handle" title="ドラッグで並び替え"></div>
+                    <input type="checkbox" id="store-${index}" value="${store.name}">
+                    <label for="store-${index}">${store.name}</label>
+                </div>`;
+            }).join('');
+
+            // チェックボックスに変更イベントを追加
+            document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+                checkbox.addEventListener('change', updateStatus);
+            });
+
+            // チェック状態を復元
+            document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+                if (selectedSet.has(checkbox.value)) checkbox.checked = true;
+            });
+
+            // DnD イベント付与
+            initDragAndDrop();
+
+            document.getElementById('totalCount').textContent = stores.length;
+            document.getElementById('saveOrderBtn').disabled = stores.length === 0;
+            // formatBtn は常に有効（店舗選択不要）
+        }
+
+        // 選択状態を更新
+        function updateStatus() {
+            const selectedCount = document.querySelectorAll('input[type="checkbox"]:checked').length;
+            document.getElementById('selectedCount').textContent = selectedCount;
+            
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = selectedCount === 0;
+        }
+
+        // ドラッグ＆ドロップで並び替え
+        function initDragAndDrop() {
+            const items = document.querySelectorAll('.store-item');
+            items.forEach(item => {
+                item.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('text/plain', e.currentTarget.dataset.index);
+                    e.currentTarget.classList.add('dragging');
+                });
+                item.addEventListener('dragend', (e) => {
+                    e.currentTarget.classList.remove('dragging');
+                });
+                item.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.currentTarget.classList.add('dragover');
+                });
+                item.addEventListener('dragleave', (e) => {
+                    e.currentTarget.classList.remove('dragover');
+                });
+                item.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    e.currentTarget.classList.remove('dragover');
+                    const from = parseInt(e.dataTransfer.getData('text/plain'), 10);
+                    const to = parseInt(e.currentTarget.dataset.index, 10);
+                    if (isNaN(from) || isNaN(to) || from === to) return;
+                    const moved = stores.splice(from, 1)[0];
+                    stores.splice(to, 0, moved);
+                    // 選択状態の保持
+                    const selected = Array.from(document.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
+                    selectedSet = new Set(selected);
+                    renderStoreList();
+                });
+            });
+        }
+
+        // 全選択
+        function selectAll() {
+            document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+                checkbox.checked = true;
+            });
+            updateStatus();
+        }
+
+        // 全解除
+        function clearAll() {
+            document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+                checkbox.checked = false;
+            });
+            updateStatus();
+        }
+
+        // 選択結果を送信
+        async function submitSelection() {
+            const selectedStores = Array.from(document.querySelectorAll('input[type="checkbox"]:checked'))
+                .map(checkbox => checkbox.value);
+
+            if (selectedStores.length === 0) {
+                showAlert('最低1つの店舗を選択してください', 'error');
+                return;
+            }
+
+            // 選択状態を記録（再描画で復元）
+            selectedSet = new Set(selectedStores);
+
+            // UI更新
+            document.getElementById('submitBtn').disabled = true;
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('storeListContainer').style.display = 'none';
+
+            try {
+                const response = await fetch('/api/scrape', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ stores: selectedStores })
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.error || 'スクレイピング処理に失敗しました');
+                }
+
+                showAlert(result.message, 'success');
+                // 3秒後にリセット
+                setTimeout(() => {
+                    resetUI();
+                }, 3000);
+            } catch (error) {
+                showAlert('エラー: ' + error.message, 'error');
+                resetUI();
+            }
+        }
+
+        // UI をリセット
+        function resetUI() {
+            document.getElementById('submitBtn').disabled = false;
+            document.getElementById('formatBtn').disabled = false;
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('storeListContainer').style.display = 'grid';
+            renderStoreList();  // 店舗一覧を再描画（完了マーク反映）
+            clearAll();
+        }
+
+        // アラート表示
+        function showAlert(message, type) {
+            const alertEl = document.getElementById('alert');
+            alertEl.textContent = message;
+            alertEl.className = 'alert ' + type;
+            
+            if (type === 'success') {
+                setTimeout(() => {
+                    alertEl.className = 'alert';
+                }, 5000);
+            }
+        }
+
+        // Excel 自動整形を実行
+        async function formatOffline() {
+            // UI更新
+            document.getElementById('formatBtn').disabled = true;
+            document.getElementById('submitBtn').disabled = true;
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('storeListContainer').style.display = 'none';
+
+            try {
+                const response = await fetch('/api/format-offline', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({})
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.error || 'Excel整形処理に失敗しました');
+                }
+
+                console.log('API レスポンス:', result);
+                console.log('完了した店舗:', result.completed_stores);
+
+                // 完了店舗にクラスを付与
+                completedStores = Array.isArray(result.completed_stores) ? result.completed_stores : [];
+                processedStores = Array.isArray(result.processed_stores) ? result.processed_stores : [];
+                console.log('completedStores に設定:', completedStores);
+                console.log('processedStores に設定:', processedStores);
+
+                showAlert(result.message, 'success');
+                // 3秒後にリセット
+                setTimeout(() => {
+                    resetUI();
+                }, 3000);
+            } catch (error) {
+                showAlert('エラー: ' + error.message, 'error');
+                resetUI();
+            }
+        }
+
+        // ページロード時に店舗リストを取得
+        document.addEventListener('DOMContentLoaded', loadStores);
+
+        // 並び順を保存（CSVに反映）
+        async function saveOrder() {
+            try {
+                const saveBtn = document.getElementById('saveOrderBtn');
+                saveBtn.disabled = true;
+                const order = stores.map(s => s.directory || s.dir || '');
+                const response = await fetch('/api/stores/reorder', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ order })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || '並び順の保存に失敗しました');
+                showAlert(result.message || '並び順を保存しました', 'success');
+                // 反映確認のため再取得
+                await loadStores();
+            } catch (error) {
+                showAlert('エラー: ' + error.message, 'error');
+            } finally {
+                document.getElementById('saveOrderBtn').disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>

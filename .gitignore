@@ -1,2 +1,21 @@
-# Ignore local Chrome profile data
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Local browser profile
 chrome_profile/
+
+# Runtime artifacts
+runtime/*.json
+runtime/*.csv
+runtime/*.log
+
+# Temporary files
+*.tmp
+*.bak
+
+# OS
+.DS_Store
+Thumbs.db
