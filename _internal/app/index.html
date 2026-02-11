@@ -54,6 +54,55 @@
             margin-bottom: 20px;
             flex-wrap: wrap;
         }
+        .editor-panel {
+            margin-bottom: 20px;
+            border: 1px solid #d9d9d9;
+            border-radius: 8px;
+            padding: 12px;
+            background: #fafafa;
+            display: none;
+        }
+        .editor-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.6fr) minmax(0, 1.6fr) auto;
+            gap: 8px;
+            margin-bottom: 8px;
+            align-items: center;
+        }
+        .editor-row input {
+            width: 100%;
+            min-width: 0;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        .editor-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+            flex-wrap: wrap;
+        }
+        .editor-btn {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            color: white;
+        }
+        .editor-open { background: #2f7bff; }
+        .editor-add { background: #00a884; }
+        .editor-save { background: #ff8a00; }
+        .editor-cancel { background: #6c757d; }
+        .editor-del {
+            background: #f44336;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 0 10px;
+            cursor: pointer;
+        }
 
         .control-btn {
             flex: 1;
@@ -320,7 +369,10 @@
             <div class="control-panel">
                 <button class="control-btn select-all-btn" onclick="selectAll()">全選択</button>
                 <button class="control-btn clear-all-btn" onclick="clearAll()">全解除</button>
+                <button class="control-btn editor-open" onclick="openStoreEditor()">店舗設定を編集</button>
             </div>
+            <div id="devtoolsMount"></div>
+            <div id="storeEditorPanel" class="editor-panel"></div>
 
             <div id="storeListContainer" class="store-list"></div>
 
@@ -345,7 +397,9 @@
 
     <script>
         let stores = [];
+        let editingStores = [];
         let selectedSet = new Set();
+        let testModeBridge = null;
         let completedStores = [];   // データ更新があった店舗
         let processedStores = [];   // 処理を実行した店舗（更新なしも含む）
 
@@ -362,6 +416,100 @@
                 showAlert('エラー: ' + error.message, 'error');
                 console.error(error);
             }
+        }
+
+        function openStoreEditor() {
+            editingStores = stores.map(s => ({
+                name: s.name || '',
+                url: s.url || '',
+                directory: s.directory || ''
+            }));
+            renderStoreEditor();
+        }
+
+        function closeStoreEditor() {
+            const panel = document.getElementById('storeEditorPanel');
+            panel.style.display = 'none';
+            panel.innerHTML = '';
+        }
+
+        function renderStoreEditor() {
+            const panel = document.getElementById('storeEditorPanel');
+            panel.style.display = 'block';
+
+            const rows = editingStores.map((s, i) => `
+                <div class="editor-row">
+                    <input data-field="name" data-index="${i}" value="${escapeHtml(s.name)}" placeholder="店舗名">
+                    <input data-field="url" data-index="${i}" value="${escapeHtml(s.url)}" placeholder="店舗URL">
+                    <input data-field="directory" data-index="${i}" value="${escapeHtml(s.directory)}" placeholder="保存先ディレクトリ">
+                    <button class="editor-del" onclick="removeStoreRow(${i})">削除</button>
+                </div>
+            `).join('');
+
+            panel.innerHTML = `
+                ${rows || '<div class="empty-message">店舗設定がありません。追加してください。</div>'}
+                <div class="editor-actions">
+                    <button class="editor-btn editor-add" onclick="addStoreRow()">行を追加</button>
+                    <button class="editor-btn editor-save" onclick="saveStoreEditor()">CSVへ保存</button>
+                    <button class="editor-btn editor-cancel" onclick="closeStoreEditor()">閉じる</button>
+                </div>
+            `;
+        }
+
+        function addStoreRow() {
+            syncEditorInputs();
+            editingStores.push({ name: '', url: '', directory: '' });
+            renderStoreEditor();
+        }
+
+        function removeStoreRow(index) {
+            syncEditorInputs();
+            editingStores.splice(index, 1);
+            renderStoreEditor();
+        }
+
+        function syncEditorInputs() {
+            const inputs = document.querySelectorAll('#storeEditorPanel input[data-field]');
+            inputs.forEach(input => {
+                const i = Number(input.dataset.index);
+                const field = input.dataset.field;
+                if (!editingStores[i]) return;
+                editingStores[i][field] = input.value;
+            });
+        }
+
+        async function saveStoreEditor() {
+            syncEditorInputs();
+            const payload = editingStores.map(s => ({
+                name: (s.name || '').trim(),
+                url: (s.url || '').trim(),
+                directory: (s.directory || '').trim()
+            }));
+
+            try {
+                const response = await fetch('/api/stores/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ stores: payload })
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || '店舗設定の保存に失敗しました');
+                showAlert(result.message || '保存しました', 'success');
+                selectedSet.clear();
+                await loadStores();
+                closeStoreEditor();
+            } catch (error) {
+                showAlert('エラー: ' + error.message, 'error');
+            }
+        }
+
+        function escapeHtml(text) {
+            return String(text || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
         }
 
         // 店舗リストを表示
@@ -489,7 +637,10 @@
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ stores: selectedStores })
+                    body: JSON.stringify({
+                        stores: selectedStores,
+                        options: getScrapeOptions()
+                    })
                 });
 
                 const result = await response.json();
@@ -498,7 +649,10 @@
                     throw new Error(result.error || 'スクレイピング処理に失敗しました');
                 }
 
-                showAlert(result.message, 'success');
+                const msg = testModeBridge && typeof testModeBridge.formatMessage === 'function'
+                    ? testModeBridge.formatMessage(result, result.message)
+                    : result.message;
+                showAlert(msg, 'success');
                 // 3秒後にリセット
                 setTimeout(() => {
                     resetUI();
@@ -575,8 +729,40 @@
             }
         }
 
+        async function loadUiConfig() {
+            try {
+                const response = await fetch('/api/ui-config');
+                if (!response.ok) return;
+                const cfg = await response.json();
+                if (!cfg.test_mode_available || !cfg.test_mode_ui_url) return;
+                await loadScript(cfg.test_mode_ui_url);
+                if (window.TestModeUI) {
+                    testModeBridge = window.TestModeUI;
+                    testModeBridge.mount({
+                        mountId: 'devtoolsMount',
+                        maxDays: Number(cfg.test_mode_max_days || 3),
+                    });
+                }
+            } catch (_) {
+                // devtools は任意機能。読み込み失敗時は通常モードで続行
+            }
+        }
+
+        function loadScript(src) {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = src;
+                script.onload = () => resolve();
+                script.onerror = () => reject(new Error('script load failed'));
+                document.head.appendChild(script);
+            });
+        }
+
         // ページロード時に店舗リストを取得
-        document.addEventListener('DOMContentLoaded', loadStores);
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadUiConfig();
+            await loadStores();
+        });
 
         // 並び順を保存（CSVに反映）
         async function saveOrder() {
@@ -599,6 +785,13 @@
             } finally {
                 document.getElementById('saveOrderBtn').disabled = false;
             }
+        }
+
+        function getScrapeOptions() {
+            if (testModeBridge && typeof testModeBridge.getOptions === 'function') {
+                return testModeBridge.getOptions();
+            }
+            return {};
         }
     </script>
 </body>

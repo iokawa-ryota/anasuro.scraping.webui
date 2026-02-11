@@ -86,6 +86,8 @@ def main():
     parser = argparse.ArgumentParser(description='選択された店舗のみをスクレイピング')
     parser.add_argument('--file', type=str, help='店舗リスト CSV ファイルを指定')
     parser.add_argument('--use-temp', action='store_true', help='runtime/temp_store_list.csv を使用')
+    parser.add_argument('--max-stores', type=int, default=0, help='処理する店舗数上限（0は無制限）')
+    parser.add_argument('--max-days-per-store', type=int, default=0, help='1店舗あたり処理日数上限（0は無制限）')
     parser.add_argument('stores', nargs='*', help='店舗名（複数可）')
     args = parser.parse_args()
 
@@ -103,6 +105,10 @@ def main():
     if df.empty:
         print("[エラー] 店舗リストが空です")
         return
+
+    if args.max_stores and args.max_stores > 0:
+        df = df.head(args.max_stores)
+        print(f"[テスト] 店舗数を {args.max_stores} 件に制限して実行します")
 
     options = uc.ChromeOptions()
     options.add_argument("--disable-blink-features=AutomationControlled")
@@ -146,6 +152,10 @@ def main():
                             date_list.append(date_text)
                     except Exception:
                         continue
+
+                if args.max_days_per_store and args.max_days_per_store > 0:
+                    date_list = sorted(date_list)[-args.max_days_per_store:]
+                    print(f"[テスト] {store_name}: 最新 {len(date_list)} 日分のみ処理")
 
                 for date_str in date_list:
                     while True:

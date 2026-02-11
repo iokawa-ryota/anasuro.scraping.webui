@@ -5,6 +5,8 @@ from datetime import datetime
 import subprocess
 import sys
 import json
+import importlib.util
+from flask import send_file
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 INTERNAL_ROOT = os.path.dirname(APP_DIR)
@@ -21,6 +23,29 @@ SCRAPING_SCRIPT_PATH = os.getenv("SCRAPING_SCRIPT_PATH", os.path.join(APP_DIR, "
 OFFLINE_SCRIPT_PATH = os.getenv("OFFLINE_SCRIPT_PATH", os.path.join(APP_DIR, "offline-scraing.py"))
 LOG_FILE = os.getenv("LOG_FILE", os.path.join(RUNTIME_DIR, "scraping_log.json"))
 COMPLETED_STORES_PATH = os.getenv("COMPLETED_STORES_PATH", os.path.join(RUNTIME_DIR, "completed_stores.json"))
+
+TEST_MODE_AVAILABLE = False
+TEST_MODE_MAX_DAYS = 3
+TEST_MODE_UI_URL = None
+TEST_MODE_MODULE_PATH = os.path.join(INTERNAL_ROOT, "devtools", "test_mode", "backend.py")
+TEST_MODE_UI_PATH = os.path.join(INTERNAL_ROOT, "devtools", "test_mode", "ui.js")
+
+if os.path.exists(TEST_MODE_MODULE_PATH):
+    try:
+        spec = importlib.util.spec_from_file_location("dev_test_mode", TEST_MODE_MODULE_PATH)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        if hasattr(module, "get_config"):
+            cfg = module.get_config()
+            TEST_MODE_AVAILABLE = bool(cfg.get("enabled", False))
+            TEST_MODE_MAX_DAYS = int(cfg.get("max_days_per_store", 3))
+        else:
+            TEST_MODE_AVAILABLE = bool(getattr(module, "ENABLE_TEST_MODE", False))
+            TEST_MODE_MAX_DAYS = int(getattr(module, "MAX_DAYS_PER_STORE", 3))
+        if TEST_MODE_AVAILABLE and os.path.exists(TEST_MODE_UI_PATH):
+            TEST_MODE_UI_URL = "/devtools/test_mode/ui.js"
+    except Exception as e:
+        print(f"[警告] devtools test_mode backend 読み込み失敗: {e}")
 
 
 def load_stores():
@@ -50,6 +75,27 @@ def load_stores():
         print(f"[エラー] 店舗リスト読み込み失敗: {e}")
         return []
 
+def save_stores(stores):
+    """
+    ブラウザ編集結果を store_list.csv に保存する。
+    stores: [{"name": "...", "url": "...", "directory": "..."}, ...]
+    """
+    normalized = []
+    for i, s in enumerate(stores, start=1):
+        name = str((s.get("name") or "").strip())
+        url = str((s.get("url") or "").strip())
+        directory = str((s.get("directory") or "").strip())
+        if not name:
+            name = f"店舗{i}"
+        normalized.append({
+            "store_name": name,
+            "store_url": url,
+            "data_directory": directory,
+        })
+
+    df = pd.DataFrame(normalized, columns=["store_name", "store_url", "data_directory"])
+    df.to_csv(STORE_LIST_PATH, index=False, encoding="utf-8-sig")
+
 
 @app.route('/')
 def index():
@@ -64,12 +110,47 @@ def index():
 def get_stores():
     return jsonify(load_stores())
 
+@app.route('/api/ui-config', methods=['GET'])
+def get_ui_config():
+    return jsonify({
+        "test_mode_available": TEST_MODE_AVAILABLE,
+        "test_mode_max_days": TEST_MODE_MAX_DAYS,
+        "test_mode_ui_url": TEST_MODE_UI_URL,
+    })
+
+@app.route('/devtools/test_mode/ui.js', methods=['GET'])
+def devtools_test_mode_ui():
+    if not (TEST_MODE_AVAILABLE and os.path.exists(TEST_MODE_UI_PATH)):
+        return jsonify({"error": "Not Found"}), 404
+    return send_file(TEST_MODE_UI_PATH, mimetype="application/javascript")
+
+@app.route('/api/stores/save', methods=['POST'])
+def save_stores_api():
+    try:
+        data = request.get_json(silent=True) or {}
+        stores = data.get("stores", [])
+        if not isinstance(stores, list):
+            return jsonify({"error": "stores は配列で指定してください"}), 400
+
+        save_stores(stores)
+        return jsonify({"message": f"{len(stores)} 件の店舗設定を保存しました"})
+    except Exception as e:
+        return jsonify({"error": f"店舗設定の保存に失敗しました: {str(e)}"}), 500
+
 
 @app.route('/api/scrape', methods=['POST'])
 def start_scraping():
     try:
         data = request.get_json(silent=True) or {}
         selected_store_names = data.get("stores", [])
+        options = data.get("options", {}) or {}
+        requested_test_mode = bool(options.get("test_mode", False))
+        max_stores = int(options.get("max_stores", 0) or 0)
+        max_days_per_store = int(options.get("max_days_per_store", 0) or 0)
+
+        # devtools test_mode が有効な場合のみ、テストモード制限を適用
+        if TEST_MODE_AVAILABLE and requested_test_mode:
+            max_days_per_store = TEST_MODE_MAX_DAYS
 
         if not selected_store_names:
             return jsonify({"error": "店舗が選択されていません"}), 400
@@ -95,8 +176,14 @@ def start_scraping():
             f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
 
         try:
+            cmd = [sys.executable, SCRAPING_SCRIPT_PATH]
+            if max_stores > 0:
+                cmd += ["--max-stores", str(max_stores)]
+            if max_days_per_store > 0:
+                cmd += ["--max-days-per-store", str(max_days_per_store)]
+
             result = subprocess.run(
-                [sys.executable, SCRAPING_SCRIPT_PATH],
+                cmd,
                 capture_output=True,
                 text=True,
                 timeout=3600,
@@ -106,6 +193,8 @@ def start_scraping():
             return jsonify({
                 "message": f"{len(selected_store_names)} 個の店舗のスクレイピングを実行しました",
                 "selected_count": len(selected_store_names),
+                "test_mode_applied": bool(TEST_MODE_AVAILABLE and requested_test_mode),
+                "test_mode_max_days": TEST_MODE_MAX_DAYS if (TEST_MODE_AVAILABLE and requested_test_mode) else 0,
                 "output": output[-500:] if output else "",
             })
         except subprocess.TimeoutExpired:
@@ -230,6 +319,7 @@ if __name__ == '__main__':
     print("=" * 50)
     print("スロット店舗スクレイピング Web UI")
     print("=" * 50)
+    print(f"store_list.csv: {os.path.abspath(STORE_LIST_PATH)}")
     print(f"ブラウザで http://{host}:{port} にアクセスしてください")
     print("=" * 50)
 
