@@ -14,6 +14,8 @@ import contextlib
 import gc
 import sys
 import argparse
+import threading
+from selenium.common.exceptions import TimeoutException, WebDriverException
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 INTERNAL_ROOT = os.path.dirname(APP_DIR)
@@ -24,6 +26,8 @@ os.makedirs(RUNTIME_DIR, exist_ok=True)
 DEFAULT_STORE_LIST_PATH = os.path.join(PROJECT_ROOT, "store_list.csv")
 DEFAULT_TEMP_STORE_LIST_PATH = os.getenv("TEMP_STORE_LIST_PATH", os.path.join(RUNTIME_DIR, "temp_store_list.csv"))
 CHROME_VERSION_MAIN = int(os.getenv("CHROME_VERSION_MAIN", "144"))
+SCRAPE_IDLE_TIMEOUT_SECONDS = int(os.getenv("SCRAPE_IDLE_TIMEOUT_SECONDS", "120"))
+SCRAPE_PAGELOAD_TIMEOUT_SECONDS = int(os.getenv("SCRAPE_PAGELOAD_TIMEOUT_SECONDS", "110"))
 
 
 def save_html(driver, date_str, save_dir):
@@ -114,6 +118,40 @@ def main():
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_argument("--start-maximized")
     driver = uc.Chrome(options=options, version_main=CHROME_VERSION_MAIN)
+    driver.set_page_load_timeout(SCRAPE_PAGELOAD_TIMEOUT_SECONDS)
+
+    activity = {"last_transition": time.time(), "label": "初期化"}
+    watchdog_stop = threading.Event()
+    watchdog_triggered = threading.Event()
+
+    def touch_transition(label):
+        activity["last_transition"] = time.time()
+        activity["label"] = label
+
+    def safe_get(url, label):
+        try:
+            driver.get(url)
+            touch_transition(label)
+        except TimeoutException as e:
+            raise RuntimeError(f"ページ遷移タイムアウト: {label} ({SCRAPE_PAGELOAD_TIMEOUT_SECONDS}秒)") from e
+        except WebDriverException as e:
+            raise RuntimeError(f"ページ遷移失敗: {label}: {e}") from e
+
+    def watchdog_loop():
+        while not watchdog_stop.wait(5):
+            idle = time.time() - activity["last_transition"]
+            if idle >= SCRAPE_IDLE_TIMEOUT_SECONDS:
+                watchdog_triggered.set()
+                print(
+                    f"[エラー] ページ遷移が{SCRAPE_IDLE_TIMEOUT_SECONDS}秒以上停止: {activity['label']}",
+                    flush=True,
+                )
+                with contextlib.suppress(Exception):
+                    driver.quit()
+                return
+
+    watchdog_thread = threading.Thread(target=watchdog_loop, daemon=True)
+    watchdog_thread.start()
 
     adblock_script = """
         document.querySelectorAll('iframe, ins, [class*="ad"], [id*="ad"], #overlay_ads_area').forEach(el => el.remove());
@@ -138,7 +176,7 @@ def main():
             existing_files = set(f.replace(".html", "") for f in os.listdir(save_dir) if f.endswith(".html"))
 
             try:
-                driver.get(list_url)
+                safe_get(list_url, f"{store_name}: 一覧ページ")
                 if detect_cloudflare(driver):
                     if sys.stdin and sys.stdin.isatty():
                         input("[入力待ち] 認証通過後に Enter を押してください。")
@@ -182,6 +220,7 @@ def main():
                         try:
                             driver.execute_script("arguments[0].scrollIntoView(true);", link_element)
                             ActionChains(driver).move_to_element(link_element).pause(0.5).click().perform()
+                            touch_transition(f"{store_name}: {date_str} 詳細ページ")
                             handle_vignette(driver, link_element)
                             driver.execute_script(adblock_script)
 
@@ -202,16 +241,20 @@ def main():
                                 break
                             break
                         except Exception:
+                            if watchdog_triggered.is_set():
+                                raise RuntimeError("ページ遷移停止を検知したため処理を中断しました")
                             break
 
-                    driver.get(list_url)
+                    safe_get(list_url, f"{store_name}: 一覧ページ復帰")
                     driver.execute_script(adblock_script)
 
                     # 日付単位の進捗（店舗内）を WebUI に通知
                     pct = int((((store_no - 1) + (date_idx / total_dates)) / max(1, total_stores)) * 100)
                     print(f"__PROGRESS__ pct {min(99, max(0, pct))} {store_name} {date_idx}/{len(date_list)}日", flush=True)
 
-            except Exception:
+            except Exception as e:
+                if watchdog_triggered.is_set():
+                    raise RuntimeError("ページ遷移停止を検知したため処理を中断しました") from e
                 print(f"[エラー] 店舗処理失敗: {store_name}")
                 # 失敗時も次店舗へ進むため進捗は進める
                 print(f"__PROGRESS__ store {store_no}/{total_stores}", flush=True)
@@ -221,6 +264,7 @@ def main():
             print(f"__PROGRESS__ store {store_no}/{total_stores}", flush=True)
 
     finally:
+        watchdog_stop.set()
         with contextlib.suppress(Exception):
             driver.quit()
         del driver

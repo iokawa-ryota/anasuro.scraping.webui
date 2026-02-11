@@ -186,11 +186,14 @@ def _run_scrape_job(job_id, cmd):
                 completed_at=datetime.now().isoformat(),
             )
         else:
+            failure_message = "スクレイピング処理に失敗しました"
+            if "ページ遷移が" in joined_output and "秒以上停止" in joined_output:
+                failure_message = "スクレイピングが停止したため中断しました（ページ遷移停止）"
             _set_job(
                 job_id,
                 status="failed",
                 progress=0,
-                message="スクレイピング処理に失敗しました",
+                message=failure_message,
                 output=joined_output[-4000:],
                 completed_at=datetime.now().isoformat(),
             )

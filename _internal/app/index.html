@@ -402,6 +402,8 @@
         let testModeBridge = null;
         let completedStores = [];   // データ更新があった店舗
         let processedStores = [];   // 処理を実行した店舗（更新なしも含む）
+        const SCRAPE_JOB_POLL_INTERVAL_MS = 1500;
+        const SCRAPE_JOB_TIMEOUT_MS = 2 * 60 * 60 * 1000;
 
         function getStoreCheckboxes() {
             return document.querySelectorAll('#storeListContainer .store-item input[type="checkbox"]');
@@ -663,13 +665,49 @@
                     ? testModeBridge.formatMessage(result, result.message)
                     : result.message;
                 showAlert(msg, 'success');
-                // 3秒後にリセット
+
+                const jobId = result.job_id || null;
+                if (!jobId) {
+                    throw new Error('ジョブIDの取得に失敗しました');
+                }
+
+                const finalJob = await waitForScrapeJobCompletion(jobId);
+                if (finalJob.status === 'failed') {
+                    throw new Error(finalJob.message || 'スクレイピング処理に失敗しました');
+                }
+
+                showAlert(finalJob.message || 'スクレイピング処理が完了しました', 'success');
                 setTimeout(() => {
                     resetUI();
-                }, 3000);
+                }, 1500);
             } catch (error) {
                 showAlert('エラー: ' + error.message, 'error');
                 resetUI();
+            }
+        }
+
+        async function waitForScrapeJobCompletion(jobId) {
+            const startedAt = Date.now();
+            while (true) {
+                if ((Date.now() - startedAt) > SCRAPE_JOB_TIMEOUT_MS) {
+                    throw new Error('ジョブ監視がタイムアウトしました');
+                }
+
+                const response = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`);
+                const result = await response.json();
+                if (!response.ok) {
+                    throw new Error(result.error || 'ジョブ状態の取得に失敗しました');
+                }
+
+                if (result && result.message) {
+                    document.getElementById('loadingMessage').textContent = result.message;
+                }
+
+                if (result.status === 'completed' || result.status === 'failed') {
+                    return result;
+                }
+
+                await new Promise(resolve => setTimeout(resolve, SCRAPE_JOB_POLL_INTERVAL_MS));
             }
         }
 
