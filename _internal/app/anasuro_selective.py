@@ -142,6 +142,7 @@ def main():
             idle = time.time() - activity["last_transition"]
             if idle >= SCRAPE_IDLE_TIMEOUT_SECONDS:
                 watchdog_triggered.set()
+                print("__WATCHDOG_TIMEOUT__", flush=True)
                 print(
                     f"[エラー] ページ遷移が{SCRAPE_IDLE_TIMEOUT_SECONDS}秒以上停止: {activity['label']}",
                     flush=True,
@@ -242,6 +243,7 @@ def main():
                             break
                         except Exception:
                             if watchdog_triggered.is_set():
+                                print("__WATCHDOG_TIMEOUT__", flush=True)
                                 raise RuntimeError("ページ遷移停止を検知したため処理を中断しました")
                             break
 
@@ -254,6 +256,7 @@ def main():
 
             except Exception as e:
                 if watchdog_triggered.is_set():
+                    print("__WATCHDOG_TIMEOUT__", flush=True)
                     raise RuntimeError("ページ遷移停止を検知したため処理を中断しました") from e
                 print(f"[エラー] 店舗処理失敗: {store_name}")
                 # 失敗時も次店舗へ進むため進捗は進める

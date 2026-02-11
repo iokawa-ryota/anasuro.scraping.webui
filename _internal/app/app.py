@@ -187,7 +187,7 @@ def _run_scrape_job(job_id, cmd):
             )
         else:
             failure_message = "スクレイピング処理に失敗しました"
-            if "ページ遷移が" in joined_output and "秒以上停止" in joined_output:
+            if "__WATCHDOG_TIMEOUT__" in joined_output or ("ページ遷移が" in joined_output and "秒以上停止" in joined_output):
                 failure_message = "スクレイピングが停止したため中断しました（ページ遷移停止）"
             _set_job(
                 job_id,
