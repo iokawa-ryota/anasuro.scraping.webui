@@ -119,11 +119,17 @@ def main():
         document.querySelectorAll('iframe, ins, [class*="ad"], [id*="ad"], #overlay_ads_area').forEach(el => el.remove());
     """
 
+    total_stores = len(df)
+
     try:
-        for index, row in df.iterrows():
+        for store_no, (_, row) in enumerate(df.iterrows(), start=1):
             list_url = row.get("store_url") or row.get("url")
             save_dir = row.get("data_directory") or row.get("directory")
-            store_name = row.get("store_name") or row.get("name") or f"店舗{index}"
+            store_name = row.get("store_name") or row.get("name") or f"店舗{store_no}"
+
+            # 店舗単位の進捗を WebUI に通知（開始時）
+            print(f"__PROGRESS__ store {store_no - 1}/{total_stores}", flush=True)
+            print(f"__PROGRESS__ store_start {store_no}/{total_stores} {store_name}", flush=True)
 
             if not list_url or not save_dir:
                 continue
@@ -157,7 +163,8 @@ def main():
                     date_list = sorted(date_list)[-args.max_days_per_store:]
                     print(f"[テスト] {store_name}: 最新 {len(date_list)} 日分のみ処理")
 
-                for date_str in date_list:
+                total_dates = max(1, len(date_list))
+                for date_idx, date_str in enumerate(date_list, start=1):
                     while True:
                         date_rows = driver.find_elements(By.CSS_SELECTOR, "div.date-table .table-row")
                         link_element = None
@@ -200,9 +207,18 @@ def main():
                     driver.get(list_url)
                     driver.execute_script(adblock_script)
 
+                    # 日付単位の進捗（店舗内）を WebUI に通知
+                    pct = int((((store_no - 1) + (date_idx / total_dates)) / max(1, total_stores)) * 100)
+                    print(f"__PROGRESS__ pct {min(99, max(0, pct))} {store_name} {date_idx}/{len(date_list)}日", flush=True)
+
             except Exception:
                 print(f"[エラー] 店舗処理失敗: {store_name}")
+                # 失敗時も次店舗へ進むため進捗は進める
+                print(f"__PROGRESS__ store {store_no}/{total_stores}", flush=True)
                 continue
+
+            # 店舗単位の進捗を WebUI に通知（完了時）
+            print(f"__PROGRESS__ store {store_no}/{total_stores}", flush=True)
 
     finally:
         with contextlib.suppress(Exception):

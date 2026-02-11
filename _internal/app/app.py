@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 import pandas as pd
 import os
 from datetime import datetime
@@ -7,6 +7,10 @@ import sys
 import json
 import importlib.util
 from flask import send_file
+import threading
+import uuid
+import re
+from collections import deque
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 INTERNAL_ROOT = os.path.dirname(APP_DIR)
@@ -23,6 +27,8 @@ SCRAPING_SCRIPT_PATH = os.getenv("SCRAPING_SCRIPT_PATH", os.path.join(APP_DIR, "
 OFFLINE_SCRIPT_PATH = os.getenv("OFFLINE_SCRIPT_PATH", os.path.join(APP_DIR, "offline-scraing.py"))
 LOG_FILE = os.getenv("LOG_FILE", os.path.join(RUNTIME_DIR, "scraping_log.json"))
 COMPLETED_STORES_PATH = os.getenv("COMPLETED_STORES_PATH", os.path.join(RUNTIME_DIR, "completed_stores.json"))
+JOBS = {}
+JOBS_LOCK = threading.Lock()
 
 TEST_MODE_AVAILABLE = False
 TEST_MODE_MAX_DAYS = 3
@@ -96,12 +102,118 @@ def save_stores(stores):
     df = pd.DataFrame(normalized, columns=["store_name", "store_url", "data_directory"])
     df.to_csv(STORE_LIST_PATH, index=False, encoding="utf-8-sig")
 
+def _set_job(job_id, **kwargs):
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+        if not job:
+            return
+        job.update(kwargs)
+
+def _get_job_field(job_id, key, default=None):
+    with JOBS_LOCK:
+        job = JOBS.get(job_id) or {}
+        return job.get(key, default)
+
+def _run_scrape_job(job_id, cmd):
+    marker = re.compile(r"__PROGRESS__\s+store\s+(\d+)/(\d+)")
+    marker_store_start = re.compile(r"__PROGRESS__\s+store_start\s+(\d+)/(\d+)(?:\s+(.+))?")
+    marker_pct = re.compile(r"__PROGRESS__\s+pct\s+(\d{1,3})(?:\s+(.+))?")
+    output_tail = deque(maxlen=200)
+    try:
+        _set_job(job_id, status="running", progress=0, message="スクレイピング処理を開始しました")
+        proc = subprocess.Popen(
+            cmd,
+            cwd=PROJECT_ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            bufsize=1,
+        )
+        for line in proc.stdout:
+            line = line.rstrip("\n")
+            output_tail.append(line)
+            m = marker.search(line)
+            if m:
+                current = int(m.group(1))
+                total = max(1, int(m.group(2)))
+                progress = min(99, int((current / total) * 100))
+                _set_job(
+                    job_id,
+                    progress=progress,
+                    message=f"スクレイピング処理を実行中... {progress}%",
+                    store_done=min(current, total),
+                    store_total=total,
+                )
+                continue
+
+            m_start = marker_store_start.search(line)
+            if m_start:
+                current_store = min(max(1, int(m_start.group(1))), max(1, int(m_start.group(2))))
+                total = max(1, int(m_start.group(2)))
+                store_name = (m_start.group(3) or "").strip()
+                start_msg = f"店舗処理中: {current_store}/{total}"
+                if store_name:
+                    start_msg = f"{start_msg} ({store_name})"
+                _set_job(
+                    job_id,
+                    store_current=current_store,
+                    store_total=total,
+                    message=start_msg,
+                )
+                continue
+
+            m_pct = marker_pct.search(line)
+            if m_pct:
+                progress = min(99, max(0, int(m_pct.group(1))))
+                detail = (m_pct.group(2) or "").strip()
+                message = f"スクレイピング処理を実行中... {progress}%"
+                if detail:
+                    message = f"{message} ({detail})"
+                _set_job(job_id, progress=progress, message=message)
+
+        return_code = proc.wait()
+        joined_output = "\n".join(output_tail)
+        if return_code == 0:
+            _set_job(
+                job_id,
+                status="completed",
+                progress=100,
+                message="スクレイピング処理が完了しました",
+                store_done=int(_get_job_field(job_id, "store_total", 0) or 0),
+                output=joined_output[-4000:],
+                completed_at=datetime.now().isoformat(),
+            )
+        else:
+            _set_job(
+                job_id,
+                status="failed",
+                progress=0,
+                message="スクレイピング処理に失敗しました",
+                output=joined_output[-4000:],
+                completed_at=datetime.now().isoformat(),
+            )
+    except Exception as e:
+        _set_job(
+            job_id,
+            status="failed",
+            progress=0,
+            message=f"スクレイピング実行エラー: {str(e)}",
+            completed_at=datetime.now().isoformat(),
+        )
+
 
 @app.route('/')
 def index():
     try:
         with open(os.path.join(APP_DIR, 'index.html'), 'r', encoding='utf-8') as f:
-            return f.read()
+            html = f.read()
+        resp = make_response(html)
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        resp.headers["Pragma"] = "no-cache"
+        resp.headers["Expires"] = "0"
+        return resp
     except Exception:
         return "index.html が見つかりません", 404
 
@@ -136,6 +248,14 @@ def save_stores_api():
         return jsonify({"message": f"{len(stores)} 件の店舗設定を保存しました"})
     except Exception as e:
         return jsonify({"error": f"店舗設定の保存に失敗しました: {str(e)}"}), 500
+
+@app.route('/api/jobs/<job_id>', methods=['GET'])
+def get_job(job_id):
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+        if not job:
+            return jsonify({"error": "job not found"}), 404
+        return jsonify(job)
 
 
 @app.route('/api/scrape', methods=['POST'])
@@ -175,32 +295,40 @@ def start_scraping():
         with open(LOG_FILE, 'a', encoding='utf-8') as f:
             f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
 
-        try:
-            cmd = [sys.executable, SCRAPING_SCRIPT_PATH]
-            if max_stores > 0:
-                cmd += ["--max-stores", str(max_stores)]
-            if max_days_per_store > 0:
-                cmd += ["--max-days-per-store", str(max_days_per_store)]
+        # -u で標準出力バッファを無効化し、進捗をリアルタイム取得する
+        cmd = [sys.executable, "-u", SCRAPING_SCRIPT_PATH]
+        if max_stores > 0:
+            cmd += ["--max-stores", str(max_stores)]
+        if max_days_per_store > 0:
+            cmd += ["--max-days-per-store", str(max_days_per_store)]
 
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=3600,
-                cwd=PROJECT_ROOT,
-            )
-            output = result.stdout + "\n" + result.stderr
-            return jsonify({
-                "message": f"{len(selected_store_names)} 個の店舗のスクレイピングを実行しました",
+        job_id = uuid.uuid4().hex
+        with JOBS_LOCK:
+            JOBS[job_id] = {
+                "job_id": job_id,
+                "status": "queued",
+                "progress": 0,
+                "message": "キューに登録しました",
                 "selected_count": len(selected_store_names),
+                "store_done": 0,
+                "store_total": len(selected_store_names),
+                "store_current": 0,
                 "test_mode_applied": bool(TEST_MODE_AVAILABLE and requested_test_mode),
                 "test_mode_max_days": TEST_MODE_MAX_DAYS if (TEST_MODE_AVAILABLE and requested_test_mode) else 0,
-                "output": output[-500:] if output else "",
-            })
-        except subprocess.TimeoutExpired:
-            return jsonify({"message": f"{len(selected_store_names)} 個の店舗のスクレイピングを開始しました（タイムアウト）"}), 202
-        except Exception as e:
-            return jsonify({"error": f"スクレイピング実行エラー: {str(e)}"}), 500
+                "created_at": datetime.now().isoformat(),
+                "completed_at": None,
+                "output": "",
+            }
+
+        t = threading.Thread(target=_run_scrape_job, args=(job_id, cmd), daemon=True)
+        t.start()
+        return jsonify({
+            "job_id": job_id,
+            "message": f"{len(selected_store_names)} 個の店舗のスクレイピングを開始しました",
+            "selected_count": len(selected_store_names),
+            "test_mode_applied": bool(TEST_MODE_AVAILABLE and requested_test_mode),
+            "test_mode_max_days": TEST_MODE_MAX_DAYS if (TEST_MODE_AVAILABLE and requested_test_mode) else 0,
+        }), 202
 
     except Exception as e:
         return jsonify({"error": f"処理エラー: {str(e)}"}), 500

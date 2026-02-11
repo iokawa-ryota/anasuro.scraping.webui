@@ -378,7 +378,7 @@
 
             <div class="loading" id="loading">
                 <div class="spinner"></div>
-                <p>スクレイピング処理を実行中...</p>
+                <p id="loadingMessage">スクレイピング処理を実行中...</p>
             </div>
 
             <button class="submit-btn" id="submitBtn" onclick="submitSelection()">
@@ -402,6 +402,14 @@
         let testModeBridge = null;
         let completedStores = [];   // データ更新があった店舗
         let processedStores = [];   // 処理を実行した店舗（更新なしも含む）
+
+        function getStoreCheckboxes() {
+            return document.querySelectorAll('#storeListContainer .store-item input[type="checkbox"]');
+        }
+
+        function getCheckedStoreCheckboxes() {
+            return document.querySelectorAll('#storeListContainer .store-item input[type="checkbox"]:checked');
+        }
 
         // ページロード時に店舗リストを取得
         async function loadStores() {
@@ -537,12 +545,12 @@
             }).join('');
 
             // チェックボックスに変更イベントを追加
-            document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+            getStoreCheckboxes().forEach(checkbox => {
                 checkbox.addEventListener('change', updateStatus);
             });
 
             // チェック状態を復元
-            document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+            getStoreCheckboxes().forEach(checkbox => {
                 if (selectedSet.has(checkbox.value)) checkbox.checked = true;
             });
 
@@ -556,7 +564,7 @@
 
         // 選択状態を更新
         function updateStatus() {
-            const selectedCount = document.querySelectorAll('input[type="checkbox"]:checked').length;
+            const selectedCount = getCheckedStoreCheckboxes().length;
             document.getElementById('selectedCount').textContent = selectedCount;
             
             const submitBtn = document.getElementById('submitBtn');
@@ -590,7 +598,7 @@
                     const moved = stores.splice(from, 1)[0];
                     stores.splice(to, 0, moved);
                     // 選択状態の保持
-                    const selected = Array.from(document.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
+                    const selected = Array.from(getCheckedStoreCheckboxes()).map(cb => cb.value);
                     selectedSet = new Set(selected);
                     renderStoreList();
                 });
@@ -599,7 +607,7 @@
 
         // 全選択
         function selectAll() {
-            document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+            getStoreCheckboxes().forEach(checkbox => {
                 checkbox.checked = true;
             });
             updateStatus();
@@ -607,7 +615,7 @@
 
         // 全解除
         function clearAll() {
-            document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+            getStoreCheckboxes().forEach(checkbox => {
                 checkbox.checked = false;
             });
             updateStatus();
@@ -615,7 +623,7 @@
 
         // 選択結果を送信
         async function submitSelection() {
-            const selectedStores = Array.from(document.querySelectorAll('input[type="checkbox"]:checked'))
+            const selectedStores = Array.from(getCheckedStoreCheckboxes())
                 .map(checkbox => checkbox.value);
 
             if (selectedStores.length === 0) {
@@ -628,7 +636,9 @@
 
             // UI更新
             document.getElementById('submitBtn').disabled = true;
+            document.getElementById('formatBtn').disabled = true;
             document.getElementById('loading').style.display = 'block';
+            document.getElementById('loadingMessage').textContent = 'スクレイピング処理を実行中...';
             document.getElementById('storeListContainer').style.display = 'none';
 
             try {
@@ -692,6 +702,7 @@
             document.getElementById('formatBtn').disabled = true;
             document.getElementById('submitBtn').disabled = true;
             document.getElementById('loading').style.display = 'block';
+            document.getElementById('loadingMessage').textContent = 'csvを生成しています。';
             document.getElementById('storeListContainer').style.display = 'none';
 
             try {

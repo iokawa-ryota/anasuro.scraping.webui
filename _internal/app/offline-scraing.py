@@ -15,7 +15,7 @@ INTERNAL_ROOT = os.path.dirname(APP_DIR)
 PROJECT_ROOT = os.path.dirname(INTERNAL_ROOT)
 RUNTIME_DIR = os.path.join(INTERNAL_ROOT, "runtime")
 DEFAULT_STORE_LIST_PATH = os.path.join(PROJECT_ROOT, "store_list.csv")
-EXCEL_OUTPUT_DIR = os.getenv("EXCEL_OUTPUT_DIR", os.path.join(PROJECT_ROOT, "output", "machine-excel"))
+EXCEL_OUTPUT_DIR = os.getenv("EXCEL_OUTPUT_DIR", os.path.join(PROJECT_ROOT, "output"))
 COMPLETED_STORES_PATH = os.getenv("COMPLETED_STORES_PATH", os.path.join(RUNTIME_DIR, "completed_stores.json"))
 
 if not os.path.exists(DEFAULT_STORE_LIST_PATH):
@@ -52,6 +52,8 @@ for i, (_, row) in enumerate(df.iterrows()):
     if os.path.exists(output_path):
         try:
             existing_df = pd.read_csv(output_path)
+            if "Total" in existing_df.columns and "total" not in existing_df.columns:
+                existing_df = existing_df.rename(columns={"Total": "total"})
             if "day" in existing_df.columns:
                 existing_df["day"] = pd.to_datetime(existing_df["day"], errors="coerce")
                 existing_days = set(existing_df["day"].dt.strftime("%Y-%m-%d").dropna())
@@ -130,7 +132,7 @@ for i, (_, row) in enumerate(df.iterrows()):
                 "difference": diff_int,
                 "bb": bb_int,
                 "rb": rb_int,
-                "Total": total,
+                "total": total,
                 "big_per": big_per,
                 "reg_per": reg_per,
             })
