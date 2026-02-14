@@ -1,0 +1,17 @@
+{"timestamp": "2026-02-12T01:34:35.968515", "selected_stores": ["on", "Sample Store A"], "count": 2, "temp_file": "D:\\Users\\Documents\\project\\anaslot-public-20260212\\_internal\\runtime\\temp_store_list.csv"}
+{"timestamp": "2026-02-12T01:36:38.987154", "action": "format_offline", "completed_count": 1, "processed_count": 1}
+{"timestamp": "2026-02-12T01:47:35.723315", "action": "format_offline", "completed_count": 0, "processed_count": 1}
+{"timestamp": "2026-02-12T01:47:44.744992", "action": "format_offline", "completed_count": 0, "processed_count": 1}
+{"timestamp": "2026-02-12T01:48:05.411682", "selected_stores": ["Sample Store A"], "count": 1, "temp_file": "D:\\Users\\Documents\\project\\anaslot-public-20260212\\_internal\\runtime\\temp_store_list.csv"}
+{"timestamp": "2026-02-12T01:53:24.683419", "selected_stores": ["on", "Sample Store A"], "count": 2, "temp_file": "D:\\Users\\Documents\\project\\anaslot-public-20260212\\_internal\\runtime\\temp_store_list.csv"}
+{"timestamp": "2026-02-12T01:55:50.219481", "selected_stores": ["on", "Store1", "Store2"], "count": 3, "temp_file": "D:\\Users\\Documents\\project\\anaslot-public-20260212\\_internal\\runtime\\temp_store_list.csv"}
+{"timestamp": "2026-02-12T02:03:35.669289", "selected_stores": ["Store1", "Store2"], "count": 2, "temp_file": "D:\\Users\\Documents\\project\\anaslot-public-20260212\\_internal\\runtime\\temp_store_list.csv"}
+{"timestamp": "2026-02-12T02:09:27.710428", "selected_stores": ["Store1", "Store2"], "count": 2, "temp_file": "D:\\Users\\Documents\\project\\anaslot-public-20260212\\_internal\\runtime\\temp_store_list.csv"}
+{"timestamp": "2026-02-12T02:16:21.600302", "selected_stores": ["Store1", "Store2"], "count": 2, "temp_file": "D:\\Users\\Documents\\project\\anaslot-public-20260212\\_internal\\runtime\\temp_store_list.csv"}
+{"timestamp": "2026-02-12T02:19:00.014129", "action": "format_offline", "completed_count": 2, "processed_count": 2}
+{"timestamp": "2026-02-12T02:54:34.033798", "selected_stores": ["Store1"], "count": 1, "temp_file": "D:\\Users\\Documents\\project\\anaslot-public-20260212\\_internal\\runtime\\temp_store_list.csv"}
+{"timestamp": "2026-02-12T02:54:34.140706", "selected_stores": ["Store1"], "count": 1, "temp_file": "D:\\Users\\Documents\\project\\anaslot-public-20260212\\_internal\\runtime\\temp_store_list.csv"}
+{"timestamp": "2026-02-12T02:54:49.084956", "selected_stores": ["Store1"], "count": 1, "temp_file": "D:\\Users\\Documents\\project\\anaslot-public-20260212\\_internal\\runtime\\temp_store_list.csv"}
+{"timestamp": "2026-02-12T02:55:17.770438", "selected_stores": ["Store1"], "count": 1, "temp_file": "D:\\Users\\Documents\\project\\anaslot-public-20260212\\_internal\\runtime\\temp_store_list.csv"}
+{"timestamp": "2026-02-12T02:55:17.875692", "selected_stores": ["Store1"], "count": 1, "temp_file": "D:\\Users\\Documents\\project\\anaslot-public-20260212\\_internal\\runtime\\temp_store_list.csv"}
+{"timestamp": "2026-02-12T07:15:50.685411", "selected_stores": ["Store1"], "count": 1, "temp_file": "D:\\Users\\Documents\\project\\anaslot-public-20260212\\_internal\\runtime\\temp_store_list.csv"}

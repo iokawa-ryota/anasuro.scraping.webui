@@ -367,6 +367,13 @@ def format_offline():
         )
         output = result.stdout + "\n" + result.stderr
 
+        if result.returncode != 0:
+            return jsonify({
+                "error": "整形処理が異常終了しました",
+                "output": output[-500:] if output else "",
+                "completed_stores": [],
+            }), 500
+
         completed_stores = []
         processed_stores = []
         if os.path.exists(COMPLETED_STORES_PATH):
