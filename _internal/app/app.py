@@ -54,6 +54,26 @@ if os.path.exists(TEST_MODE_MODULE_PATH):
         print(f"[警告] devtools test_mode backend 読み込み失敗: {e}")
 
 
+def _normalize_directory_value(value):
+    path_text = str(value or "").strip().strip('"')
+    if not path_text:
+        return ""
+
+    normalized = path_text.replace("/", "\\")
+    if os.name == "nt":
+        had_dot_prefix = normalized.startswith(".\\")
+        try:
+            normalized = os.path.normpath(normalized)
+        except Exception:
+            pass
+        if had_dot_prefix and not os.path.isabs(normalized) and normalized not in (".", ".\\"):
+            normalized = ".\\" + normalized.lstrip("\\")
+
+    if normalized == ".":
+        return ".\\"
+    return normalized
+
+
 def load_stores():
     try:
         if not os.path.exists(STORE_LIST_PATH):
@@ -74,7 +94,7 @@ def load_stores():
             stores.append({
                 "name": str(row.get("store_name") or row.get("name") or f"店舗{i}"),
                 "url": str(row.get("store_url") or row.get("url") or ""),
-                "directory": str(row.get("data_directory") or row.get("directory") or ""),
+                "directory": _normalize_directory_value(row.get("data_directory") or row.get("directory") or ""),
             })
         return stores
     except Exception as e:
@@ -90,7 +110,7 @@ def save_stores(stores):
     for i, s in enumerate(stores, start=1):
         name = str((s.get("name") or "").strip())
         url = str((s.get("url") or "").strip())
-        directory = str((s.get("directory") or "").strip())
+        directory = _normalize_directory_value(s.get("directory"))
         if not name:
             name = f"店舗{i}"
         normalized.append({
@@ -101,6 +121,63 @@ def save_stores(stores):
 
     df = pd.DataFrame(normalized, columns=["store_name", "store_url", "data_directory"])
     df.to_csv(STORE_LIST_PATH, index=False, encoding="utf-8-sig")
+
+
+def _to_project_relative_path(path_value):
+    normalized = os.path.normpath(str(path_value or "").strip())
+    if not normalized:
+        return ""
+    project_norm = os.path.normpath(PROJECT_ROOT)
+    try:
+        if os.path.commonpath([project_norm, normalized]) == project_norm:
+            rel = os.path.relpath(normalized, project_norm)
+            if rel == ".":
+                return ".\\"
+            return ".\\" + rel.replace("/", "\\")
+    except Exception:
+        pass
+    return normalized
+
+
+def _pick_directory_windows(initial_dir):
+    ps_script = r"""
+Add-Type -AssemblyName System.Windows.Forms
+$dialog = New-Object System.Windows.Forms.OpenFileDialog
+$dialog.Title = '保存先フォルダを選択してください'
+$dialog.Filter = 'フォルダ|*.folder'
+$dialog.CheckFileExists = $false
+$dialog.CheckPathExists = $true
+$dialog.ValidateNames = $false
+$dialog.DereferenceLinks = $true
+$dialog.Multiselect = $false
+$dialog.FileName = 'フォルダを選択'
+if (Test-Path -LiteralPath $env:INITIAL_DIR) {
+    $dialog.InitialDirectory = $env:INITIAL_DIR
+}
+$result = $dialog.ShowDialog()
+if ($result -eq [System.Windows.Forms.DialogResult]::OK -and $dialog.FileName) {
+    $pickedPath = [System.IO.Path]::GetDirectoryName($dialog.FileName)
+    if (-not $pickedPath) {
+        $pickedPath = $dialog.FileName
+    }
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    Write-Output $pickedPath
+}
+"""
+    env = os.environ.copy()
+    env["INITIAL_DIR"] = initial_dir
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-STA", "-Command", ps_script],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=120,
+        env=env,
+    )
+    if result.returncode != 0:
+        raise RuntimeError((result.stderr or "").strip() or "フォルダ選択ダイアログの起動に失敗しました")
+    return (result.stdout or "").strip()
 
 def _set_job(job_id, **kwargs):
     with JOBS_LOCK:
@@ -251,6 +328,37 @@ def save_stores_api():
         return jsonify({"message": f"{len(stores)} 件の店舗設定を保存しました"})
     except Exception as e:
         return jsonify({"error": f"店舗設定の保存に失敗しました: {str(e)}"}), 500
+
+
+@app.route('/api/pick-directory', methods=['POST'])
+def pick_directory_api():
+    try:
+        if os.name != "nt":
+            return jsonify({"error": "この機能はWindows専用です"}), 400
+
+        data = request.get_json(silent=True) or {}
+        requested = str(data.get("initial_directory") or "").strip().strip('"')
+        if requested:
+            initial_dir = requested if os.path.isabs(requested) else os.path.abspath(os.path.join(PROJECT_ROOT, requested))
+        else:
+            initial_dir = PROJECT_ROOT
+        if not os.path.isdir(initial_dir):
+            initial_dir = PROJECT_ROOT
+
+        selected = _pick_directory_windows(initial_dir)
+        if not selected:
+            return jsonify({"cancelled": True})
+
+        selected = str(selected).strip().strip('"')
+        return jsonify({
+            "cancelled": False,
+            "directory": _to_project_relative_path(selected),
+            "directory_abs": os.path.normpath(selected),
+        })
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "フォルダ選択がタイムアウトしました"}), 500
+    except Exception as e:
+        return jsonify({"error": f"フォルダ選択エラー: {str(e)}"}), 500
 
 @app.route('/api/jobs/<job_id>', methods=['GET'])
 def get_job(job_id):
@@ -430,11 +538,14 @@ def reorder_stores():
             return jsonify({"error": "CSVに data_directory 列がありません"}), 400
 
         df['__orig_index__'] = range(len(df))
-        dir_to_index = {str(row[col]): idx for idx, (_, row) in enumerate(df.iterrows())}
+        dir_to_index = {
+            _normalize_directory_value(row[col]): idx
+            for idx, (_, row) in enumerate(df.iterrows())
+        }
 
         ordered_indices = []
         for d in order:
-            idx = dir_to_index.get(str(d))
+            idx = dir_to_index.get(_normalize_directory_value(d))
             if idx is not None:
                 ordered_indices.append(idx)
 

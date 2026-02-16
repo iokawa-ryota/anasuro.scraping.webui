@@ -55,6 +55,7 @@
             flex-wrap: wrap;
         }
         .editor-panel {
+            --editor-action-col-width: 46px;
             margin-bottom: 20px;
             border: 1px solid #d9d9d9;
             border-radius: 8px;
@@ -64,10 +65,28 @@
         }
         .editor-row {
             display: grid;
-            grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.6fr) minmax(0, 1.6fr) auto;
+            grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.6fr) minmax(0, 1.6fr) var(--editor-action-col-width) var(--editor-action-col-width);
             gap: 8px;
             margin-bottom: 8px;
             align-items: center;
+        }
+        .editor-header {
+            display: grid;
+            grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.6fr) minmax(0, 1.6fr) var(--editor-action-col-width) var(--editor-action-col-width);
+            gap: 8px;
+            margin-bottom: 8px;
+            align-items: center;
+            text-align: left;
+            color: #4a4a4a;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .editor-header span {
+            display: block;
+            padding: 0;
+            justify-self: stretch;
+            text-align: left;
+            white-space: nowrap;
         }
         .editor-row input {
             width: 100%;
@@ -100,7 +119,17 @@
             color: white;
             border: none;
             border-radius: 4px;
-            padding: 0 10px;
+            width: var(--editor-action-col-width);
+            padding: 0;
+            cursor: pointer;
+        }
+        .editor-browse {
+            background: #2f7bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            width: var(--editor-action-col-width);
+            padding: 0;
             cursor: pointer;
         }
 
@@ -350,6 +379,60 @@
             padding: 30px 20px;
             font-size: 14px;
         }
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.45);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            padding: 16px;
+        }
+        .modal-overlay.show {
+            display: flex;
+        }
+        .modal-card {
+            width: 100%;
+            max-width: 440px;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 14px 40px rgba(0, 0, 0, 0.28);
+            overflow: hidden;
+        }
+        .modal-header {
+            padding: 14px 16px;
+            font-size: 16px;
+            font-weight: bold;
+            color: #c62828;
+            border-bottom: 1px solid #eee;
+        }
+        .modal-body {
+            padding: 16px;
+            color: #333;
+            line-height: 1.6;
+            font-size: 14px;
+        }
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            padding: 12px 16px 16px;
+        }
+        .modal-btn {
+            border: none;
+            border-radius: 6px;
+            padding: 8px 14px;
+            cursor: pointer;
+            font-weight: bold;
+            color: #fff;
+        }
+        .modal-cancel {
+            background: #6c757d;
+        }
+        .modal-confirm {
+            background: #e53935;
+        }
     </style>
 </head>
 <body>
@@ -394,10 +477,21 @@
             </button>
         </div>
     </div>
+    <div id="deleteModal" class="modal-overlay">
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle">
+            <div id="deleteModalTitle" class="modal-header">店舗データ削除の確認</div>
+            <div id="deleteModalMessage" class="modal-body"></div>
+            <div class="modal-actions">
+                <button class="modal-btn modal-cancel" onclick="closeDeleteModal()">キャンセル</button>
+                <button class="modal-btn modal-confirm" onclick="confirmDeleteStore()">削除する</button>
+            </div>
+        </div>
+    </div>
 
     <script>
         let stores = [];
         let editingStores = [];
+        let deleteTargetIndex = null;
         let selectedSet = new Set();
         let testModeBridge = null;
         let completedStores = [];   // データ更新があった店舗
@@ -434,11 +528,13 @@
                 url: s.url || '',
                 directory: s.directory || ''
             }));
+            closeDeleteModal();
             renderStoreEditor();
         }
 
         function closeStoreEditor() {
             const panel = document.getElementById('storeEditorPanel');
+            closeDeleteModal();
             panel.style.display = 'none';
             panel.innerHTML = '';
         }
@@ -452,11 +548,17 @@
                     <input data-field="name" data-index="${i}" value="${escapeHtml(s.name)}" placeholder="店舗名">
                     <input data-field="url" data-index="${i}" value="${escapeHtml(s.url)}" placeholder="店舗URL">
                     <input data-field="directory" data-index="${i}" value="${escapeHtml(s.directory)}" placeholder="保存先ディレクトリ">
-                    <button class="editor-del" onclick="removeStoreRow(${i})">削除</button>
+                    <button class="editor-browse" onclick="pickStoreDirectory(${i})">参照</button>
+                    <button class="editor-del" onclick="openDeleteModal(${i})">削除</button>
                 </div>
             `).join('');
 
             panel.innerHTML = `
+                <div class="editor-header">
+                    <span>店舗名</span>
+                    <span>店舗URL</span>
+                    <span>保存先ディレクトリ</span>
+                </div>
                 ${rows || '<div class="empty-message">店舗設定がありません。追加してください。</div>'}
                 <div class="editor-actions">
                     <button class="editor-btn editor-add" onclick="addStoreRow()">行を追加</button>
@@ -469,13 +571,66 @@
         function addStoreRow() {
             syncEditorInputs();
             editingStores.push({ name: '', url: '', directory: '' });
+            closeDeleteModal();
             renderStoreEditor();
         }
 
-        function removeStoreRow(index) {
+        function openDeleteModal(index) {
             syncEditorInputs();
-            editingStores.splice(index, 1);
+            if (!editingStores[index]) return;
+            deleteTargetIndex = index;
+            const targetName = (editingStores[index].name || '').trim() || `店舗${index + 1}`;
+            document.getElementById('deleteModalMessage').textContent = `「${targetName}」を削除します。よろしいですか？`;
+            document.getElementById('deleteModal').classList.add('show');
+        }
+
+        function closeDeleteModal() {
+            deleteTargetIndex = null;
+            document.getElementById('deleteModal').classList.remove('show');
+        }
+
+        function confirmDeleteStore() {
+            if (deleteTargetIndex === null || !editingStores[deleteTargetIndex]) {
+                closeDeleteModal();
+                return;
+            }
+            editingStores.splice(deleteTargetIndex, 1);
+            closeDeleteModal();
             renderStoreEditor();
+            showAlert('店舗設定を1件削除しました', 'success');
+        }
+
+        async function pickStoreDirectory(index) {
+            syncEditorInputs();
+            const current = editingStores[index] ? (editingStores[index].directory || '') : '';
+            try {
+                const response = await fetch('/api/pick-directory', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ initial_directory: current })
+                });
+                const raw = await response.text();
+                let result = {};
+                if (raw) {
+                    try {
+                        result = JSON.parse(raw);
+                    } catch (_) {
+                        if (!response.ok) {
+                            throw new Error(`フォルダ選択APIがJSON以外を返しました (HTTP ${response.status})。サーバーを再起動してください。`);
+                        }
+                        throw new Error('フォルダ選択APIの応答解析に失敗しました');
+                    }
+                }
+                if (!response.ok) throw new Error(result.error || `フォルダ選択に失敗しました (HTTP ${response.status})`);
+                if (result.cancelled) return;
+                if (!editingStores[index]) return;
+
+                editingStores[index].directory = result.directory || '';
+                closeDeleteModal();
+                renderStoreEditor();
+            } catch (error) {
+                showAlert('エラー: ' + error.message, 'error');
+            }
         }
 
         function syncEditorInputs() {
@@ -811,6 +966,11 @@
         document.addEventListener('DOMContentLoaded', async () => {
             await loadUiConfig();
             await loadStores();
+            document.getElementById('deleteModal').addEventListener('click', (event) => {
+                if (event.target.id === 'deleteModal') {
+                    closeDeleteModal();
+                }
+            });
         });
 
         // 並び順を保存（CSVに反映）
