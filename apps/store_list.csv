@@ -1,0 +1,3 @@
+﻿store_name,store_url,data_directory
+店舗A,https://example.com/a,.\data\test
+店舗B,https://example.com/b,.\data\test2
