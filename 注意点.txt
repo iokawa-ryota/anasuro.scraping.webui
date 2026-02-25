@@ -1,0 +1,39 @@
+【このプロジェクトの注意点メモ】
+
+1. ディレクトリ構成
+- 開発の正本は `apps/` 配下です。
+- 配布物は `distribution/slot-infomation-clean` を生成して使います。
+- `distribution/slot-infomation-clean` と `distribution/*.zip` は生成物扱いです（手編集しない）。
+
+2. バッチ実行時の注意
+- ルートから `build_distribution.bat` を実行する。
+- アプリ起動は `apps/start.bat`、初回セットアップは `apps/setup.bat` を使う。
+- 相対パス依存のため、バッチ内の `cd /d %~dp0` を削除しない。
+
+3. Python/環境依存
+- `python` コマンドが PATH に必要。
+- Playwright E2E は追加セットアップが必要:
+  - `python -m pip install -r apps/_internal/test/requirements-e2e.txt`
+  - `python -m playwright install chromium`
+
+4. テスト実行
+- APIスモーク: `python apps/_internal/test/run_api_smoke_tests.py`
+- UI E2E: `python apps/_internal/test/run_ui_e2e_playwright.py`
+- E2Eは `store_list.csv` を一時書き換えて復元する仕様。
+
+5. ポート/起動
+- 通常UI: `http://127.0.0.1:5000`（`apps/start.bat`）
+- UI E2E: `127.0.0.1:5010` を使うため、競合時は失敗する。
+
+6. 配布生成スクリプトの仕様
+- `apps/_internal/bin/build_distribution.py` が配布物を再生成する。
+- `_internal/test`, `_internal/docs`, `_internal/devtools` は配布から除外される。
+- `data/`, `output/`, `_internal/runtime/` は配布時にクリーニングされる。
+
+7. コミット前チェック
+- 意図しない生成物（distribution配下やzip）が混ざっていないか確認する。
+- ローカル実行で更新された `apps/store_list.csv` や runtime系の差分が意図どおりか確認する。
+
+8. Windows前提
+- フォルダ選択APIは Windows専用実装。
+- パス表記は `\` に正規化する前提。

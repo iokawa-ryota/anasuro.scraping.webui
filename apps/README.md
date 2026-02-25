@@ -65,3 +65,9 @@ store_name,store_url,data_directory
 ## 困ったとき
 
 - `setup.bat` でエラーが出る場合は、Pythonが入っていない可能性があります
+
+## 配布パッケージ作成（開発者向け）
+
+- ルート直下で `build_distribution.bat` を実行すると、`distribution/slot-infomation` を再生成します
+- 同時に `distribution/slot-infomation.zip` も作成します
+- Git関連ファイルや開発用テスト資産（`_internal/test` など）は配布物に含めません

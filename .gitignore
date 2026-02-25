@@ -19,3 +19,7 @@ runtime/*.log
 # OS
 .DS_Store
 Thumbs.db
+
+# Distribution artifacts
+distribution/slot-infomation/
+distribution/*.zip
