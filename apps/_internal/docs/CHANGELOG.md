@@ -2,6 +2,20 @@
 
 このプロジェクトの主要な変更履歴を管理します。
 
+## 2026-02-25
+
+### 構成/運用
+
+- 開発正本を `apps/` 配下へ統一（アプリ本体を `apps` 直下に再配置）
+- 配布用ディレクトリを `distribution/` に分離
+- 配布生成をスクリプト化（`build_distribution.bat` / `apps/_internal/bin/build_distribution.py`）
+- 配布生成物（`distribution/slot-infomation/`, `distribution/*.zip`）をGit追跡対象外に変更
+
+### テスト運用
+
+- APIスモークテストとUI E2Eの実行コマンドを `apps/_internal/test/` 基準へ統一
+- 配布生成スクリプトの運用手順を `apps/README.md` に追記
+
 ## 2026-02-12
 
 ### 配布向け構成の整理
