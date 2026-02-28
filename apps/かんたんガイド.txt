@@ -2,7 +2,8 @@ slot-infomation かんたんガイド
 
 【初回セットアップ】
 1. setup.bat をダブルクリック
-2. 「Setup complete」が表示されたらOK
+2. Pythonが未インストールの場合は自動でインストールを試行
+3. 「Setup complete」が表示されたらOK
 
 【通常起動】
 1. start.bat をダブルクリック
@@ -20,5 +21,5 @@ slot-infomation かんたんガイド
 - 「Flask Server」コンソールで Ctrl + C
 
 【困ったとき】
-- setup.bat でエラーが出る: Python が未インストールの可能性
+- setup.bat でエラーが出る: winget が使えない可能性（手動で Python を入れる）
 - 画面が開かない: ブラウザで http://localhost:5000 を開く

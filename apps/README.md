@@ -15,7 +15,7 @@
 ## 前提条件
 
 - Windowsパソコンを使用している
-- Python がインストール済み（`setup.bat` 実行時に利用）
+- インターネット接続（Python未導入時に `winget` 自動インストールを行うため）
 
 ## フォルダ直下で使うもの
 
@@ -31,8 +31,9 @@
 
 1. このフォルダを開く
 2. `setup.bat` をダブルクリック
-3. 画面に「Setup complete」が出たら、`start.bat` をダブルクリック
-4. ブラウザ画面で「店舗設定を編集」を開き、店舗を登録または更新
+3. Python未導入の場合は `winget` による自動インストールが実行されます
+4. 画面に「Setup complete」が出たら、`start.bat` をダブルクリック
+5. ブラウザ画面で「店舗設定を編集」を開き、店舗を登録または更新
 
 ## 起動方法
 
@@ -67,7 +68,8 @@ store_name,store_url,data_directory
 
 ## 困ったとき
 
-- `setup.bat` でエラーが出る場合は、Pythonが入っていない可能性があります
+- `setup.bat` でエラーが出る場合は、`winget` が使えない環境の可能性があります
+- その場合は手動で Python をインストールしてください: https://www.python.org/downloads/windows/
 
 ## 配布パッケージ作成（開発者向け）
 
