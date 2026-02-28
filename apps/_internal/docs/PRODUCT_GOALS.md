@@ -13,7 +13,7 @@
 3. 内部実装は `_internal/` に集約し、ユーザー操作対象から分離する。  
 4. ドキュメントは次の3本に統一する。  
    - `apps/_internal/docs/PRODUCT_GOALS.md`（本ファイル）  
-   - `apps/STARTUP_GUIDE.md`（ユーザーガイド）  
+   - `apps/README.md`（ユーザーガイド）  
    - `apps/_internal/docs/CHANGELOG.md`（変更履歴）
 
 ## 達成状況
